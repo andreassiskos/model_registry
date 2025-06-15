@@ -1,11 +1,52 @@
-name: Test Python Setup
-on: [push]
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
 jobs:
-  test:
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      - run: python --version
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          mkdir -p logs
+          PYTHONPATH=. pytest --capture=tee-sys --log-cli-level=INFO test/ | tee logs/test_results.log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: logs
